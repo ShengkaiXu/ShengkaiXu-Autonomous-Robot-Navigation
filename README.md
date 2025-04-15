@@ -140,13 +140,3 @@ The buggy includes extra LEDs that can provide visual feedback for debugging:
 - **M.BEAM and BRAKE**: Enables full-brightness mode.
 - **TURN-L and TURN-R**: Controls turn signals without brightness control.
 
-## Mark sheets for ECM
-
-### Louis Lab Sheet
-![louis-lab](gifs/louis-lab-sheet.png)
-
-### Shengkai Lab Sheet
-![shengkai-lab](gifs/shengkai-lab-sheet.png)
-
-### Mini-project Mark Sheet
-![miniproject-sheet](gifs/louis-shengkai-miniproject-sheet.png)
