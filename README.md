@@ -8,7 +8,7 @@ This project implements a robust control system for a robot buggy, integrating m
 
 An autonomous robot (buggy) has to navigate a mine consisting of black walls 100mm high with coloured cards on some of the walls.
  
-![Navi Diagram](gifs/maze.gif)
+![image](https://github.com/user-attachments/assets/519a2baa-d0e7-4f83-a19b-5411555e9ff6)
 
 The colour of the cards indicate the required action for the buggy to take, defined in the table below.
 
