@@ -1,168 +1,152 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/sAtZQXpK)
-# Course project - Mine navigation search and rescue
+# Buggy Mine Navigation
 
-## Challenge brief
+## Objective
 
-Your task is to develop an autonomous robot that can navigate a "mine" using a series of instructions coded in coloured cards and return to its starting position.  Your robot must be able to perform the following: 
+This project implements a robust control system for a robot buggy, integrating motor control, sensor data processing, and autonomous navigation capabilities. The codebase ensures precise movement, efficient sensor communication, and reliable debugging for development and testing. The buggy is designed to navigate a "mine" environment, interact with colour-coded navigation instructions, and return to its starting position reliably.
 
-1. Navigate towards a coloured card and stop before impacting the card
-1. Read the card colour
-1. Interpret the card colour using a predefined code and perform the navigation instruction
-1. When the final card is reached, navigate back to the starting position
-1. Handle exceptions and return back to the starting position if final card cannot be found
+## Background
 
-## "Mine" environment specification
-
-A "mine" is contstructed from black plywood walls 100mm high with some walls having coloured cards located on the sides of the maze to assist with navigation. The following colour code is to be used for navigation:
-
-Colour | Instruction
----------|---------
-Red | Turn Right 90
-Green | Turn Left 90
-Blue | Turn 180
-Yellow | Reverse 1 square and turn right 90
-Pink | Reverse 1 square and turn left 90
-Orange | Turn Right 135
-Light blue | Turn Left 135 
-White | Finish (return home)
-Black | Maze wall colour
-
-Mine courses will vary in difficulty, with the simplest requiring 4 basic moves to navigate. More advanced courses may require 10 or moves to navigate. The mines may have features such as dead ends but colour cards will always direct you to the end of the maze. Once the end of the maze has been reached, you must return to the starting position. An example course to navigate is shown below. You do not know in advance which colours will be in the course or how many.
-
+An autonomous robot (buggy) has to navigate a mine consisting of black walls 100mm high with coloured cards on some of the walls.
+ 
 ![Navi Diagram](gifs/maze.gif)
 
-## Resources and project submission
+The colour of the cards indicate the required action for the buggy to take, defined in the table below.
 
-To develop your solution you have your Clicker 2 board, buggy and colour click add on board. You must not use any hardware that is not provided as part of this course and you must use the XC8 compiler to compile your C code. 
+     | Color      | Instruction                         |
+     | ---------- | ----------------------------------- |
+     | Red        | Turn Right 90°                      |
+     | Green      | Turn Left 90°                       |
+     | Blue       | Turn 180°                           |
+     | Yellow     | Reverse 1 square and turn right 90° |
+     | Pink       | Reverse 1 square and turn left 90°  |
+     | Orange     | Turn Right 135°                     |
+     | Light Blue | Turn Left 135°                      |
+     | White      | Finish (return home)                |
+     | Black      | Maze wall color                     |
+     
+Upon completion of the maze/mine (white card), the buggy is required to return to its starting point. The buggy is equipped with four motors and a ColourClick sensor (RGB sensor + RGB LED), controlled by a PIC18 microcontroller.
 
-Please use this GitHub repo to manage your software development and submit your project code. 
+## Colour Detection
 
-Final testing will take place in the CAGB foyer and testing areas will be provided around the mechatronics lab. You will not know the exact layout of the maze(s) in advance. You will also be asked to give a short presentation on the testing day.
+The ColourClick consists of a 4 channel colour sensor (red, green, blue, and clear), and an RGB LED. The communication with the ColourClick is via I2C and documented well in the challenge brief. The solution employed used the LED to illuminate the wall ahead with 'white' light, then a colour reading is made.
 
-## Supplementary technical information
+The colour detection is based on the HSL colourspace. By converting from RGB to HSL, the lightness (or sometimes brightness) aspect of the colour can be removed, leaving only the base colours – defined by H (hue) and S (saturation). Therefore, if the hue and saturation of all the given cards are known, a 'distance' from the measured colour to the known values can be worked out. This is simply done by summing the squared differences of the H and S values, done in `colourClick.c`.
 
-### Additional buggy features
+However, by removing lightness, black and white are no longer well defined in HSL space. Therefore, an early comparison is done to check the range of the raw RGB values, i.e. `range = max(r,g,b) - min(r,g,b)`. If this is sufficiently below a threshold, the buggy concludes that it must be black or white.
 
-In addition to the motor drives we explored in lab 6, the buggy contains some additional features that may be of use during the project. The first feature is additional LEDs, controlled through the pins labelled **H.LAMPS**, **M.BEAM**, **BRAKE**, **TURN-L** and **TURN-R**. H.LAMPS turns on the front white LEDs and rear red LEDs, at a reduced brightness. M.BEAM and BRAKE enable you to turn these LEDs on at full brightness. The turn signals have not hardware based brightness control. These LEDs give you a method to provide feedback for debugging, in addition of the LEDs on the clicker board.
+Altogether, the colour detection procedure is as follows:
 
-![Buggy pinout](gifs/buggy_pins.png)
+1. Check if the area in front of the sensor is a wall by comparing the clear channel to a low threshold; near a wall is darker than away from a wall. This is done using the internal interrupt of the ColourClick. If a wall is not detected, then exit.
+2. Check if the range of the calibrated RGB values is within a range threshold to determine black and white. If satisfied, then use the clear channel to decide between black and white and exit.
+3. Convert the RGB values to HSL, to then be compared to the known card HSL values. The closest in Euclidean distance is deemed the detected colour.
 
-A further feature of the buggy is **BAT-VSENSE** pin which allows you to monitor the batter voltage via an analogue input pin. The battery is connected across a voltage divider, as shown in the diagram below:
+Note that step 2 mentions calibrated RGB values. This specifically means "calibrated to white", such that when measuring the white card, all three RGB channels should return equal values. This is necessary because the sensors are not equally sensitive, as seen in the figure below.
 
-![Bat sense](gifs/bat_vsense.png)
+![sensitivity](gifs/sensitivity.png)
 
-The voltage at BAT-VSENSE will always be one third of that at the battery. Measuring this value can be useful for determining if your battery needs charging. You could also use it to calibrate your robot to perform well at different charge levels. 
+Additionally, the individual RGB LEDs are not equally powerful either. Notably, green is much brighter than blue. This can be corrected by employing PWM control on each individual pin to adjust the white balance of the emitted light. However, the calibration to white method mentioned was sufficient. Instead, the PWM control was used in debugging to echo the measured colour. The PWM was implemented using Timer2 on the PIC as the built-it CCP cannot be wired to the required output pins.
 
-### Colour click
+Lastly, to reduce the influence of ambient lighting, a shroud was created for the ColourPick as seen in the figure below. This blocks out the ambient light when the buggy is up against a wall. This allows for better wall detection and more consistent colour readings.
 
-The Colour click board contains 2 devices to help with navigation, a tri-colour LED for illumination and a 4 channel RGBC photodiode sensor. This combination of two devices (an illumination source and a sensor) allow you a make measurements of the reflected colour of objects near the sensor. The circuit diagram for the Colour click is shown below:
+![shroud](gifs/shroud.png)
 
-![Color Cick](gifs/color_click.png)
+## Motor Control
 
-The tri-colour LED is the simpler of the two devices to control. Three separate pins control the red, green and blue LEDs individually, despite them being in a single package. Control via these pins is simple digital on/off control and if any brightness control was required, the user would need program the microcontroller to generate a PWM signal to achieve this.  
+The motors are controlled through the PWM capabilities of the microcontroller. By varying the duty cycle, the motor power output can be varied and different speeds achieved.
 
-The second device on the Colour click is the TCS3471 colour light-to-digital converter. The sensor contains a grid of 4x4 photodiodes, 4 are sensitive to red light, 4 green light, 4 blue light and 4 "clear" light (that is, a range of wavelengths, see datasheet for exact spectral response). When light falls on the photodiode the photons are absorbed and current is generated. This signal is then integrated over time using integrators and sampled by 16 bit on board ADCs. Communication with the device is achieved using an I2C interface. This enables configuration of the device to customise sampling of the data (i.e. integration time, gain, etc.) and to read the 16 bit digital values for each of the RGBC channels. The relative magnitude of these values gives you information about the colour of light that is falling on the sensor. The device can also be configured to send an interrupt signal to the PIC when signal reaches a preset value.
+For this implementation, a few 'fundamental' actions are defined:
 
-### I2C
+* `motors_advance(cells)`: advance (forwards or backwards) an integer number of mine 'cells'
+* `motors_turn(num_45)`: turn (left or right) an integer number of 45 degree angles
+* `motors_recentre()`: reverse from wall to cell centre
+* `motors_realign()`: advance (forwards or backwards) towards a wall to realign the buggy axis, then return to centre
 
-The I2C interface widely used in industry for communication between microcontrollers and peripheral integrated circuits (other chips) over short distances. I2C is serial communication bus that enables communication between many devices over a simple 2 wire interface. One wire is the data line (SDA) and is used for both transmission and receiving. The second wire (SCL) is used for a clock signal to ensure all devices are synchronous. To ensure communication of data occurs without problem a message protocol must be followed and understood by all devices on the bus. Devices are termed master and slave devices, with master devices initiation communication to a slave device via unique address for that device. The general sequence of communication between a master/slave over the I2C interface is a follows:
+The main motor function for wall discovery is dependent on the fundamental actions above.
 
-1. Send a Start bit
-1. Send the slave address, usually 7 bits
-1. Send a Read (1) or Write (0) bit to define what type of transaction it is
-1. Wait for an Acknowledge bit
-1. Send a data or command byte (8 bits)
-1. Wait for Acknowledge bit
-1. Send the Stop bit
+* `motors_search()`: advance forwards indefinitely until a wall is detected, return the colour of the wall and an estimate of the distance travelled
 
-This is shown pictorial in the figure below:
+## Navigation
 
-![I2C](gifs/i2c.png)
+### Rationale
 
-Although it is possible to program an entirely software based I2C interface, luckily for us our PIC chip has a module dedicated to generating and receiving I2C signals: the Master Synchronous Serial Port Module, or MSSP (see chapter 28 of the PIC datasheet). This module provides methods for sending start/stop/acknowledge bits and allows us to focus on sending/receiving data.
+The navigation is based on impulsed, or discrete cells travelled, as opposed to the most continuous method of tracking time travelled then reversing actions. This is because the mine is built on a grid, so by recording the buggy's position and orientation as it traverses, the spatial positions of encountered walls can be recorded. This allows for more powerful path simplification algorithms back to the start, as well as more greedy realignment routines against known walls whenever possible. Fewer moves in the return path and more realignment attempts result in a more reliable buggy overall.
 
-The included i2c.c/h files contain functions to help you get started with I2C communication. The first function below sets up the MSSP module as an I2C master device and configures the necessary pins.
+### Principle
 
-	void I2C_2_Master_Init(void)
-	{
-		//i2c config  
-		SSP2CON1bits.SSPM= 0b1000;    // i2c master mode
-		SSP2CON1bits.SSPEN = 1;       //enable i2c
-		SSP2ADD = (_XTAL_FREQ/(4*_I2C_CLOCK))-1; //Baud rate divider bits (in master mode)
-  
-		//pin configuration for i2c  
-		TRISDbits.TRISD5 = 1;                   //Disable output driver
-		TRISDbits.TRISD6 = 1;                   //Disable output driver
-		ANSELDbits.ANSELD5=0;					// disable analogue on pins
-		ANSELDbits.ANSELD6=0;					// disable analogue on pins
-		SSP2DATPPS=0x1D;      //pin RD5
-		SSP2CLKPPS=0x1E;      //pin RD6
-		RD5PPS=0x1C;      // data output
-		RD6PPS=0x1B;      //clock output
-	}
-	
-Bits with the SSP2CON2 register are set to send the individual start/stop/acknowledge bits used in the protocol. These must only be set when the bus is idle (nothing being sent/received). The I2C_2_Master_Start(), I2C_2_Master_Stop() and I2C_2_Master_RepStart() functions allow you add the necessary bits as defined in the protocol above. Data is sent on the bus using the SSP2BUF register:
+In software, the buggy stores a map (a grid of cells), where cells are defined by (2 bytes per cell)
 
-	void I2C_2_Master_Write(unsigned char data_byte)
-	{
-		I2C_2_Master_Idle();
-		SSP2BUF = data_byte;         //Write data to SSPBUF
-	}
+```
+typedef struct {
+    uint8_t steps; // steps to the start
+    uint8_t dir : 3; // direction to the start
+    uint8_t walls : 4; // LSB is N wall, all the way to MSB for W wall; if is_walls_diagonal, then LSB is / wall and next is \ wall
+    uint8_t is_walls_diagonal : 1; // if walls are diagonal, otherwise they are orthogonal
+} Cell;
+```
 
-Data is also read using the same SSP2BUF registers. However, to receive data we first need to switch the module into receiver mode. We also need to start the acknowledge sequence to let the slave device know what we have received the data OK. The following function achieves this:
+Beginning at the starting square (predefined), the buggy updates the map such that each cell it encounters stores the number of steps taken to reach it. If more than one visit to a cell is encountered, then the smallest number of steps back to the start is the one kept. Similarly, the direction towards the start is also stored. Therefore, once the end is reached, the buggy can retrace an optimised path back to the start following the `dir` parameter of each cell it is on.
 
-	unsigned char I2C_2_Master_Read(unsigned char ack)
-	{
-		unsigned char tmp;
-		I2C_2_Master_Idle();
-		SSP2CON2bits.RCEN = 1;        // put the module into receive mode
-		I2C_2_Master_Idle();
-		tmp = SSP2BUF;                //Read data from SS2PBUF
-		I2C_2_Master_Idle();
-		SSP2CON2bits.ACKDT = !ack;     // 0 turns on acknowledge data bit
-		SSP2CON2bits.ACKEN = 1;        //start acknowledge sequence
-		return tmp;
-	}
+Additionally, collisions with walls are recorded, such that the same walls can be used to realign the buggy whenever possible.
 
-The functions described so form the basics required for I2C communication with the PIC. To communicate with the TCS3471 onboard the Colour click we first need to know its address. This is listed in the data sheet as 0x29. To send our first byte over the I2C we need to send this address combined with the transaction type (read or write) as defined in the protocol diagram above. This lets the TCS3471 know the message is intended for it and not some other device on the interface. Next we send a byte which is a combination of command type and the register address in the TCS3471 that we want to write to. Finally we the value that we want to write to that register. This sequence is shown in the function below:
+Overall, this is a more powerful solution than tracking the time of actions, because with the known constraints of the mine (known square grids), information is no longer sequential but known spatially for additional processing (i.e. wall finding, path optimisation). However, this comes at a cost of memory space, which is not viable for larger mines.
+ 
+## Results
+### First test
+In the first test, the buggy navigated the course at a relatively slow speed. The color recognition, as well as the left and right turns, worked accurately and reliably. The return logic was correct and executed properly. The straight-line motion had minimal error. However, due to differences between the test and exam environments and a failure to calibrate the motors_advance function, the buggy miscalculated the distance for a single grid square. The buggy's internal calculation for one grid was shorter than the actual distance, leading it to believe it had traveled three squares when it had only traveled two. This resulted in the buggy reversing too far during the goHome process. After then, we calibrated the buggy's forward distance for one grid square. After this adjustment, the buggy performed perfectly, successfully navigating the course and returning to the starting position without any errors.
 
-	void color_writetoaddr(char address, char value){
-		I2C_2_Master_Start();         		//Start condition
-		I2C_2_Master_Write(0x52 | 0x00);     //7 bit device address + Write (0) mode (note 0x52=0x29<<1)
-		I2C_2_Master_Write(0x80 | address);    //command + register address
-		I2C_2_Master_Write(value);    			//value to store in the register
-		I2C_2_Master_Stop();          //Stop condition
-	}
+https://github.com/user-attachments/assets/4f154dc2-802d-4331-b84a-709c3f9b71e5
 
-We then call the function to, for example, turn the device on:
+### Second test
+In second test, to complete the task in a shorter time, we redefined left_fast_power and right_fast_power to allow the buggy to move at a faster speed. The forward distance for one grid square was recalibrated for this higher speed. With these adjustments, the buggy executed all steps quickly and accurately, and it successfully returned to the starting position.To complete the task in a shorter time, we redefined left_fast_power and right_fast_power to allow the buggy to move at a faster speed. The forward distance for one grid square was recalibrated for this higher speed. With these adjustments, the buggy executed all steps quickly and accurately, and it successfully returned to the starting position.
 
-	color_writetoaddr(0x00, 0x01); // write 1 to the PON bit in the device enable register
-	
-There are additional commands that must be set to initialise the device and many registers that be configured to obtain optimal performance for the sensor in your conditions. It is up to you to carefully read the TCS3471 datasheet and experiment with this.
+https://github.com/user-attachments/assets/68d86b3d-549d-4f7c-bad8-08dbde002960
 
-To read values from the TCS3471 you need to a similar sequence to above but you first need to tell the device which register you want to deal with, before telling the device you want read from it. The example below uses the combined read format to read multiple bytes in sequence. The auto-increment is set so that instead of reading the same register over and over again, it automatically advances to the next one. The example starts at the Red channel low byte address and then automatically advances and reads the associated high byte.
+Note that at 1:03 of the above video, the path optimisation can be seen as a large chuck of the mine is ignored on the way home.
 
-	unsigned int color_read_Red(void)
-	{
-		unsigned int tmp;
-		I2C_2_Master_Start();         //Start condition
-		I2C_2_Master_Write(0x52 | 0x00);     //7 bit address + Write mode
-		I2C_2_Master_Write(0xA0 | 0x16);    //command (auto-increment protocol transaction) + start at RED low register
-		I2C_2_Master_RepStart();
-		I2C_2_Master_Write(0x52 | 0x01);     //7 bit address + Read (1) mode
-		tmp=I2C_2_Master_Read(1);			// read the Red LSB
-		tmp=tmp | (I2C_2_Master_Read(0)<<8); //read the Red MSB (don't acknowledge as this is the last read)
-		I2C_2_Master_Stop();          //Stop condition
-		return tmp;
-	}
 
-Instead of separate functions for each channel you may want to create a structure to store all the values together, and pass a pointer to the function so that all values in the structure can be updated in one operation. An example structure might look like this:
+### Final test
+In the final test, the buggy successfully completed the navigation task. However, when detecting the white card to initiate the return function, a programming error in the updateMap function caused an issue:
 
-	//definition of RGB structure
-	struct RGB_val { 
-		unsigned int R;
-		unsigned int G;
-		unsigned int B;
-	};
+```
+case YELLOW: // reverse and turn right
+    motors_advance(-1);
+    map.x += DIR_DX[DIR_OPPOSITE[map.dir]];
+    map.y -= DIR_DY[DIR_OPPOSITE[map.dir]];
+```
+In the final line, the minus sign should be changed to plus. This error led the buggy to misinterpret its position and fail to return to the starting point.
 
-This concludes the basics of I2C and communication with the colour sensor. Best of luck! 
+https://github.com/user-attachments/assets/5ba05334-dd23-4a3b-b0bd-0362c78ec1c0
+
+After correcting this mistake, we tested the second half of the maze due to time constraints. The buggy demonstrated that it could correctly execute the return function, completing the task successfully.
+
+https://github.com/user-attachments/assets/da7ec5f1-4168-4f51-bb42-2bebc0258891
+
+## Further Work
+
+###  Onboard Calibration
+Add code to enable onboard calibration of color detection, turning angles, and forward/backward motion without needing a computer. This feature would allow quick adjustments in varying environments.
+
+### Higher Speed Calibration
+Since the code supports higher speeds, calibrate the buggy to operate at increased speeds and ensure precision during navigation. This would enable tasks to be completed faster and more efficiently.
+
+### Stable Distance Prediction
+Improving the distance prediction algorithm will make the buggy's movements more stable and consistent. This can be achieved by refining the logic in the motors_advance function to better handle variations in speed, surface friction, and wheel slippage. Enhanced distance sensors or encoders could also be integrated to provide more accurate feedback for distance tracking.
+
+## Additional Buggy Features
+
+The buggy includes extra LEDs that can provide visual feedback for debugging:
+
+- **H.LAMPS**: Turns on front white and rear red LEDs at reduced brightness.
+- **M.BEAM and BRAKE**: Enables full-brightness mode.
+- **TURN-L and TURN-R**: Controls turn signals without brightness control.
+
+## Mark sheets for ECM
+
+### Louis Lab Sheet
+![louis-lab](gifs/louis-lab-sheet.png)
+
+### Shengkai Lab Sheet
+![shengkai-lab](gifs/shengkai-lab-sheet.png)
+
+### Mini-project Mark Sheet
+![miniproject-sheet](gifs/louis-shengkai-miniproject-sheet.png)
