@@ -42,13 +42,15 @@ Altogether, the colour detection procedure is as follows:
 
 Note that step 2 mentions calibrated RGB values. This specifically means "calibrated to white", such that when measuring the white card, all three RGB channels should return equal values. This is necessary because the sensors are not equally sensitive, as seen in the figure below.
 
-![sensitivity](gifs/sensitivity.png)
+![image](https://github.com/user-attachments/assets/4b0a9daa-f62c-41a7-b93e-7e677e8ad553)
+
 
 Additionally, the individual RGB LEDs are not equally powerful either. Notably, green is much brighter than blue. This can be corrected by employing PWM control on each individual pin to adjust the white balance of the emitted light. However, the calibration to white method mentioned was sufficient. Instead, the PWM control was used in debugging to echo the measured colour. The PWM was implemented using Timer2 on the PIC as the built-it CCP cannot be wired to the required output pins.
 
 Lastly, to reduce the influence of ambient lighting, a shroud was created for the ColourPick as seen in the figure below. This blocks out the ambient light when the buggy is up against a wall. This allows for better wall detection and more consistent colour readings.
 
-![shroud](gifs/shroud.png)
+![image](https://github.com/user-attachments/assets/a957a98a-6680-4f2c-a71e-2d64f16d30a9)
+
 
 ## Motor Control
 
